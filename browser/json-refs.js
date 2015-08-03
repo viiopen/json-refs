@@ -181,7 +181,7 @@ var pathToPointer = module.exports.pathToPointer = function pathToPointer (path)
  *
  * @throws Error if the arguments are missing or invalid
  */
-var findRefs = module.exports.findRefs = function findRefs (json) {
+var findRefs = module.exports.findRefs = function findRefs (json, options) {
   if (_.isUndefined(json)) {
     throw new Error('json is required');
   } else if (!_.isPlainObject(json)) {
@@ -190,6 +190,10 @@ var findRefs = module.exports.findRefs = function findRefs (json) {
 
   return traverse(json).reduce(function (acc) {
     var val = this.node;
+
+    if (options.collapseAllOf) {
+      debugger;
+    }
 
     if (this.key === '$ref' && isJsonReference(this.parent.node)) {
       acc[pathToPointer(this.path)] = val;
@@ -415,7 +419,7 @@ function realResolveRefs (json, options, metadata) {
   }
 
   // All references at this point should be local except missing/invalid references
-  _.each(findRefs(json), function (ref, refPtr) {
+  _.each(findRefs(json, options), function (ref, refPtr) {
     if (!isRemotePointer(ref)) {
       replaceReference(ref, refPtr);
     }
@@ -493,7 +497,7 @@ function resolveRemoteRefs (json, options, parentPtr, parents, metadata) {
     };
   }
 
-  _.each(findRefs(json), function (ptr, refPtr) {
+  _.each(findRefs(json, options), function (ptr, refPtr) {
     if (isRemotePointer(ptr)) {
       allTasks = allTasks.then(function () {
         var remoteLocation = computeUrl(options.location, ptr);

@@ -12,7 +12,13 @@
   <script>
     JsonRefs.resolveRefs({
       $ref: 'https://api.github.com/repos/whitlockjc/json-refs'
-    }, function (err, resolved) {
+    },
+
+    {
+      collapseAllOf: true
+    },
+
+    function (err, resolved) {
       if (err) {
         document.body.innerHTML += '<p><strong>Dereferencing Failed</strong></p><span>' + err.message + '</span>';
       } else {
