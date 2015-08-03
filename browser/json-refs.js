@@ -75,6 +75,37 @@ var supportedSchemes = ['file', 'http', 'https'];
  */
 
 /* Internal Functions */
+/**
+ * When options.collapseAllOf is true, extend path item with
+ * values given
+ */
+function collapseValues (jsonT, path, options, value) {
+  if ( ! path[path.length - 2] === 'allOf' ) {
+    jsonT.set(path, value);
+    return;
+  }
+
+  jsonT.set(path,true);
+  path = path.slice(0,path.length-2);
+
+  var current = jsonT.get(path),
+    allOfs = current.allOf,
+    keys = Object.keys(value);
+
+  // extend current value with properties from
+  // referenced value
+  keys.map(function (key) {
+    current[key] = value[key];
+  });
+
+  if ( allOfs.filter(function (ref) {
+    return ( ref !== true );
+  }).length === 0 ) {
+    delete current.allOf;
+  }
+
+  return;
+}
 
 /**
  * Retrieves the content at the URL and returns its JSON content.
@@ -409,7 +440,7 @@ function realResolveRefs (json, options, metadata) {
           refMetadata.circular = true;
         }
 
-        jsonT.set(parentPath, value);
+        collapseValues(jsonT, parentPath, options, value);
       }
     } else {
       refMetadata.missing = true;
