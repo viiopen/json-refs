@@ -1,3 +1,11 @@
+# viiopen notes
+
+fork of https://github.com/whitlockjc/json-refs.git
+
+## Additions
+
+Adds collapsing of `allOf` arrays into a single value.
+
 # json-refs
 
 Various utilities for [JSON References][json-reference-draft-spec], and [JSON Pointers][json-pointer-spec] since JSON
