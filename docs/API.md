@@ -3,6 +3,9 @@
 <dt><a href="#isJsonReference">isJsonReference</a> ⇒ <code>boolean</code></dt>
 <dd><p>Returns whether or not the object represents a JSON Reference.</p>
 </dd>
+<dt><a href="#isAllOf">isAllOf</a> ⇒ <code>Boolean</code></dt>
+<dd><p>Returns whether or not the object represents allOf array</p>
+</dd>
 <dt><a href="#pathToPointer">pathToPointer</a> ⇒ <code>string</code></dt>
 <dd><p>Takes an array of path segments and creates a JSON Pointer from it.</p>
 </dd>
@@ -18,6 +21,11 @@
 </dl>
 ## Functions
 <dl>
+<dt><a href="#collapseValues">collapseValues(jsonT, path, options, value)</a> ⇒</dt>
+<dd><p>/**
+When options.collapseAllOf is true, extend path item with
+values given</p>
+</dd>
 <dt><a href="#getRemoteJson">getRemoteJson(url, options)</a> ⇒ <code>Promise</code></dt>
 <dd><p>Retrieves the content at the URL and returns its JSON content.</p>
 </dd>
@@ -57,6 +65,17 @@ Returns whether or not the object represents a JSON Reference.
 | Param | Type | Description |
 | --- | --- | --- |
 | [obj] | <code>object</code> &#124; <code>string</code> | The object to check |
+
+<a name="isAllOf"></a>
+## isAllOf ⇒ <code>Boolean</code>
+Returns whether or not the object represents allOf array
+
+**Kind**: global variable  
+**Returns**: <code>Boolean</code> - true if the argument is an object and it has an array property allOf  
+
+| Param | Type | Description |
+| --- | --- | --- |
+| obj | <code>object</code> | The object to check |
 
 <a name="pathToPointer"></a>
 ## pathToPointer ⇒ <code>string</code>
@@ -120,6 +139,22 @@ Takes a JSON Reference and returns an array of path segments.
 | Param | Type | Description |
 | --- | --- | --- |
 | ptr | <code>string</code> | The JSON Pointer for the JSON Reference |
+
+<a name="collapseValues"></a>
+## collapseValues(jsonT, path, options, value) ⇒
+/**
+When options.collapseAllOf is true, extend path item with
+values given
+
+**Kind**: global function  
+**Returns**: Does not return a value  
+
+| Param | Type | Description |
+| --- | --- | --- |
+| jsonT | <code>Object</code> | traversable representation of JSON/object |
+| path | <code>String</code> | the dotted notation representation of the path to the property to be set |
+| options | <code>Object</code> | options given for how to process |
+| value | <code>Any</code> | The value to give the property |
 
 <a name="getRemoteJson"></a>
 ## getRemoteJson(url, options) ⇒ <code>Promise</code>

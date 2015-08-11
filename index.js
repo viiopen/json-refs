@@ -73,6 +73,43 @@ var supportedSchemes = ['file', 'http', 'https'];
  */
 
 /* Internal Functions */
+/**
+/**
+ * When options.collapseAllOf is true, extend path item with
+ * values given
+ * @param  {Object} jsonT   traversable representation of JSON/object
+ * @param  {String} path    the dotted notation representation of the path to the property to be set
+ * @param  {Object} options options given for how to process
+ * @param  {Any}    value   The value to give the property
+ * @return                  Does not return a value
+ */
+function collapseValues (jsonT, path, options, value) {
+  if ( ! path[path.length - 2] === 'allOf' ) {
+    jsonT.set(path, value);
+    return;
+  }
+
+  jsonT.set(path,true);
+  path = path.slice(0,path.length-2);
+
+  var current = jsonT.get(path),
+    allOfs = current.allOf,
+    keys = Object.keys(value);
+
+  // extend current value with properties from
+  // referenced value
+  keys.map(function (key) {
+    current[key] = value[key];
+  });
+
+  if ( allOfs.filter(function (ref) {
+    return ( ref !== true );
+  }).length === 0 ) {
+    delete current.allOf;
+  }
+
+  return;
+}
 
 /**
  * Retrieves the content at the URL and returns its JSON content.
@@ -140,6 +177,17 @@ var isJsonReference = module.exports.isJsonReference = function isJsonReference 
 };
 
 /**
+ * Returns whether or not the object represents allOf array
+ * 
+ * @param  {object}  obj - The object to check
+ * 
+ * @return {Boolean} true if the argument is an object and it has an array property allOf
+ */
+var isAllOf = module.exports.isAllOf = function isAllOf (obj) {
+  return _.isPlainObject(obj) && _.isArray(obj.allOf);
+};
+
+/**
  * Takes an array of path segments and creates a JSON Pointer from it.
  *
  * @see {@link http://tools.ietf.org/html/rfc6901}
@@ -179,7 +227,7 @@ var pathToPointer = module.exports.pathToPointer = function pathToPointer (path)
  *
  * @throws Error if the arguments are missing or invalid
  */
-var findRefs = module.exports.findRefs = function findRefs (json) {
+var findRefs = module.exports.findRefs = function findRefs (json, options) {
   if (_.isUndefined(json)) {
     throw new Error('json is required');
   } else if (!_.isPlainObject(json)) {
@@ -190,6 +238,24 @@ var findRefs = module.exports.findRefs = function findRefs (json) {
     var val = this.node;
 
     if (this.key === '$ref' && isJsonReference(this.parent.node)) {
+      acc[pathToPointer(this.path)] = val;
+    }
+
+    return acc;
+  }, {});
+};
+
+var findAllOfs = module.exports.findAllOfs = function findAllOfs (json, options) {
+  if (_.isUndefined(json)) {
+    throw new Error('json is required');
+  } else if (!_.isPlainObject(json)) {
+    throw new Error('json must be an object');
+  }
+
+  return traverse(json).reduce(function (acc) {
+    var val = this.node;
+
+    if (this.key === 'allOf' && isAllOf(this.parent.node)) {
       acc[pathToPointer(this.path)] = val;
     }
 
@@ -372,6 +438,22 @@ function realResolveRefs (json, options, metadata) {
     return scrubbed;
   }
 
+  function replaceAllOf (allOf, allOfPtr) {
+    var localPath = pathFromPointer(allOfPtr);
+    var value = jsonT.get(localPath);
+    var allOfPtrPath = pathFromPointer(allOfPtr);
+    var parentPath = allOfPtrPath.slice(0, allOfPtrPath.length - 1);
+
+    var source = jsonT.get(parentPath);
+
+    if ( !source ) {
+      return;
+    }
+
+    options.collapseAllOf.apply(source, value);
+    delete source.allOf;
+  }
+
   function replaceReference (ref, refPtr) {
     var refMetadataKey = combineRefs(refPtr, '#');
     var localRef = ref = ref.indexOf('#') === -1 ?
@@ -419,6 +501,16 @@ function realResolveRefs (json, options, metadata) {
     }
   });
 
+  if ( options.collapseAllOf ) {
+    // Nested allofs must be handled in reverse order
+    // so we make an array and reverse it to get our
+    // order of operations
+    var allOfs = findAllOfs(json);
+    Object.keys(allOfs).reverse().map(function (key) {
+      replaceAllOf(allOfs[key], key);
+    });
+  }
+
   // Remove full locations from reference metadata
   if (!_.isUndefined(options.location)) {
     _.each(metadata, function (refMetadata) {
@@ -453,6 +545,7 @@ function resolveRemoteRefs (json, options, parentPtr, parents, metadata) {
     var refMetadata = metadata[refMetadataKey] || {};
     var refPath = pathFromPointer(refPtr);
     var value;
+
 
     if (_.isUndefined(resolved)) {
       refMetadata.circular = true;
