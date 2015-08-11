@@ -76,8 +76,14 @@ var supportedSchemes = ['file', 'http', 'https'];
 
 /* Internal Functions */
 /**
+/**
  * When options.collapseAllOf is true, extend path item with
  * values given
+ * @param  {Object} jsonT   traversable representation of JSON/object
+ * @param  {String} path    the dotted notation representation of the path to the property to be set
+ * @param  {Object} options options given for how to process
+ * @param  {Any}    value   The value to give the property
+ * @return                  Does not return a value
  */
 function collapseValues (jsonT, path, options, value) {
   if ( ! path[path.length - 2] === 'allOf' ) {
@@ -173,6 +179,17 @@ var isJsonReference = module.exports.isJsonReference = function isJsonReference 
 };
 
 /**
+ * Returns whether or not the object represents allOf array
+ * 
+ * @param  {object}  obj - The object to check
+ * 
+ * @return {Boolean} true if the argument is an object and it has an array property allOf
+ */
+var isAllOf = module.exports.isAllOf = function isAllOf (obj) {
+  return _.isPlainObject(obj) && _.isArray(obj.allOf);
+};
+
+/**
  * Takes an array of path segments and creates a JSON Pointer from it.
  *
  * @see {@link http://tools.ietf.org/html/rfc6901}
@@ -222,11 +239,25 @@ var findRefs = module.exports.findRefs = function findRefs (json, options) {
   return traverse(json).reduce(function (acc) {
     var val = this.node;
 
-    if (options.collapseAllOf) {
-      debugger;
+    if (this.key === '$ref' && isJsonReference(this.parent.node)) {
+      acc[pathToPointer(this.path)] = val;
     }
 
-    if (this.key === '$ref' && isJsonReference(this.parent.node)) {
+    return acc;
+  }, {});
+};
+
+var findAllOfs = module.exports.findAllOfs = function findAllOfs (json, options) {
+  if (_.isUndefined(json)) {
+    throw new Error('json is required');
+  } else if (!_.isPlainObject(json)) {
+    throw new Error('json must be an object');
+  }
+
+  return traverse(json).reduce(function (acc) {
+    var val = this.node;
+
+    if (this.key === 'allOf' && isAllOf(this.parent.node)) {
       acc[pathToPointer(this.path)] = val;
     }
 
@@ -409,6 +440,22 @@ function realResolveRefs (json, options, metadata) {
     return scrubbed;
   }
 
+  function replaceAllOf (allOf, allOfPtr) {
+    var localPath = pathFromPointer(allOfPtr);
+    var value = jsonT.get(localPath);
+    var allOfPtrPath = pathFromPointer(allOfPtr);
+    var parentPath = allOfPtrPath.slice(0, allOfPtrPath.length - 1);
+
+    var source = jsonT.get(parentPath);
+
+    if ( !source ) {
+      return;
+    }
+
+    options.collapseAllOf.apply(source, value);
+    delete source.allOf;
+  }
+
   function replaceReference (ref, refPtr) {
     var refMetadataKey = combineRefs(refPtr, '#');
     var localRef = ref = ref.indexOf('#') === -1 ?
@@ -440,7 +487,7 @@ function realResolveRefs (json, options, metadata) {
           refMetadata.circular = true;
         }
 
-        collapseValues(jsonT, parentPath, options, value);
+        jsonT.set(parentPath, value);
       }
     } else {
       refMetadata.missing = true;
@@ -450,11 +497,21 @@ function realResolveRefs (json, options, metadata) {
   }
 
   // All references at this point should be local except missing/invalid references
-  _.each(findRefs(json, options), function (ref, refPtr) {
+  _.each(findRefs(json), function (ref, refPtr) {
     if (!isRemotePointer(ref)) {
       replaceReference(ref, refPtr);
     }
   });
+
+  if ( options.collapseAllOf ) {
+    // Nested allofs must be handled in reverse order
+    // so we make an array and reverse it to get our
+    // order of operations
+    var allOfs = findAllOfs(json);
+    Object.keys(allOfs).reverse().map(function (key) {
+      replaceAllOf(allOfs[key], key);
+    });
+  }
 
   // Remove full locations from reference metadata
   if (!_.isUndefined(options.location)) {
@@ -490,6 +547,7 @@ function resolveRemoteRefs (json, options, parentPtr, parents, metadata) {
     var refMetadata = metadata[refMetadataKey] || {};
     var refPath = pathFromPointer(refPtr);
     var value;
+
 
     if (_.isUndefined(resolved)) {
       refMetadata.circular = true;
