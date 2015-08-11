@@ -73,43 +73,6 @@ var supportedSchemes = ['file', 'http', 'https'];
  */
 
 /* Internal Functions */
-/**
-/**
- * When options.collapseAllOf is true, extend path item with
- * values given
- * @param  {Object} jsonT   traversable representation of JSON/object
- * @param  {String} path    the dotted notation representation of the path to the property to be set
- * @param  {Object} options options given for how to process
- * @param  {Any}    value   The value to give the property
- * @return                  Does not return a value
- */
-function collapseValues (jsonT, path, options, value) {
-  if ( ! path[path.length - 2] === 'allOf' ) {
-    jsonT.set(path, value);
-    return;
-  }
-
-  jsonT.set(path,true);
-  path = path.slice(0,path.length-2);
-
-  var current = jsonT.get(path),
-    allOfs = current.allOf,
-    keys = Object.keys(value);
-
-  // extend current value with properties from
-  // referenced value
-  keys.map(function (key) {
-    current[key] = value[key];
-  });
-
-  if ( allOfs.filter(function (ref) {
-    return ( ref !== true );
-  }).length === 0 ) {
-    delete current.allOf;
-  }
-
-  return;
-}
 
 /**
  * Retrieves the content at the URL and returns its JSON content.
@@ -178,10 +141,10 @@ var isJsonReference = module.exports.isJsonReference = function isJsonReference 
 
 /**
  * Returns whether or not the object represents allOf array
- * 
+ *
  * @param  {object}  obj - The object to check
- * 
- * @return {Boolean} true if the argument is an object and it has an array property allOf
+ *
+ * @returns {Boolean} true if the argument is an object and it has an array property allOf
  */
 var isAllOf = module.exports.isAllOf = function isAllOf (obj) {
   return _.isPlainObject(obj) && _.isArray(obj.allOf);
@@ -227,7 +190,7 @@ var pathToPointer = module.exports.pathToPointer = function pathToPointer (path)
  *
  * @throws Error if the arguments are missing or invalid
  */
-var findRefs = module.exports.findRefs = function findRefs (json, options) {
+var findRefs = module.exports.findRefs = function findRefs (json) {
   if (_.isUndefined(json)) {
     throw new Error('json is required');
   } else if (!_.isPlainObject(json)) {
@@ -245,7 +208,7 @@ var findRefs = module.exports.findRefs = function findRefs (json, options) {
   }, {});
 };
 
-var findAllOfs = module.exports.findAllOfs = function findAllOfs (json, options) {
+var findAllOfs = module.exports.findAllOfs = function findAllOfs (json) {
   if (_.isUndefined(json)) {
     throw new Error('json is required');
   } else if (!_.isPlainObject(json)) {
@@ -371,6 +334,7 @@ function computeUrl (base, ref) {
 function realResolveRefs (json, options, metadata) {
   var depth = _.isUndefined(options.depth) ? 1 : options.depth;
   var jsonT = traverse(json);
+  var allOfs;
 
   function findParentReference (path) {
     var pPath = path.slice(0, path.lastIndexOf('allOf'));
@@ -446,7 +410,7 @@ function realResolveRefs (json, options, metadata) {
 
     var source = jsonT.get(parentPath);
 
-    if ( !source ) {
+    if (!source) {
       return;
     }
 
@@ -501,11 +465,11 @@ function realResolveRefs (json, options, metadata) {
     }
   });
 
-  if ( options.collapseAllOf ) {
+  if (options.collapseAllOf) {
     // Nested allofs must be handled in reverse order
     // so we make an array and reverse it to get our
     // order of operations
-    var allOfs = findAllOfs(json);
+    allOfs = findAllOfs(json);
     Object.keys(allOfs).reverse().map(function (key) {
       replaceAllOf(allOfs[key], key);
     });
