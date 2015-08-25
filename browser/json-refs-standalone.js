@@ -301,6 +301,7 @@ function combineRefs (base, ref) {
 
 function computeUrl (base, ref) {
   var isRelative = ref.charAt(0) !== '#' && ref.indexOf(':') === -1;
+  var isRootRelative = isRelative && ref.charAt(0) === '/';
   var newLocation = [];
   var refSegments = (ref.indexOf('#') > -1 ? ref.split('#')[0] : ref).split('/');
 
@@ -324,7 +325,7 @@ function computeUrl (base, ref) {
 
   if (isRelative) {
     // Add reference segments
-    refSegments.forEach(segmentHandler);
+    (base && isRootRelative ? refSegments.slice(1) : refSegments).forEach(segmentHandler);
   } else {
     newLocation = refSegments;
   }

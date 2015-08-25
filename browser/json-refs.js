@@ -32,8 +32,8 @@ if (typeof Promise === 'undefined') {
 }
 
 var _ = require('./lib/utils');
-var pathLoader = (typeof window !== "undefined" ? window['PathLoader'] : typeof global !== "undefined" ? global['PathLoader'] : null);
-var traverse = (typeof window !== "undefined" ? window['traverse'] : typeof global !== "undefined" ? global['traverse'] : null);
+var pathLoader = require('path-loader');
+var traverse = require('traverse');
 
 var remoteCache = {};
 var supportedSchemes = ['file', 'http', 'https'];
@@ -302,6 +302,7 @@ function combineRefs (base, ref) {
 
 function computeUrl (base, ref) {
   var isRelative = ref.charAt(0) !== '#' && ref.indexOf(':') === -1;
+  var isRootRelative = isRelative && ref.charAt(0) === '/';
   var newLocation = [];
   var refSegments = (ref.indexOf('#') > -1 ? ref.split('#')[0] : ref).split('/');
 
@@ -325,7 +326,7 @@ function computeUrl (base, ref) {
 
   if (isRelative) {
     // Add reference segments
-    refSegments.forEach(segmentHandler);
+    (base && isRootRelative ? refSegments.slice(1) : refSegments).forEach(segmentHandler);
   } else {
     newLocation = refSegments;
   }
@@ -608,6 +609,144 @@ function resolveRemoteRefs (json, options, parentPtr, parents, metadata) {
 
   return allTasks;
 }
+
+/**
+ * Takes a JSON document, resolves all JSON References and returns a fully resolved equivalent along with reference
+ * resolution metadata.
+ *
+ * **Important Details**
+ *
+ * * The input arguments are never altered
+ * * When using promises, only one value can be resolved so it is an object whose keys and values are the same name and
+ *   value as arguments 1 and 2 for {@link resultCallback}
+ *
+ * @param {object} json - The JSON  document having zero or more JSON References
+ * @param {object} [options] - The options (All options are passed down to whitlockjc/path-loader)
+ * @param {number} [options.depth=1] - The depth to resolve circular references
+ * @param {string} [options.location] - The location to which relative references should be resolved
+ * @param {prepareRequestCallback} [options.prepareRequest] - The callback used to prepare an HTTP request
+ * @param {processContentCallback} [options.processContent] - The callback used to process a reference's content
+ * @param {resultCallback} [done] - The result callback
+ *
+ * @throws Error if the arguments are missing or invalid
+ *
+ * @returns {Promise} The promise.
+ *
+ * @example
+ * // Example using callbacks
+ *
+ * JsonRefs.resolveRefs({
+ *   name: 'json-refs',
+ *   owner: {
+ *     $ref: 'https://api.github.com/repos/whitlockjc/json-refs#/owner'
+ *   }
+ * }, function (err, resolved, metadata) {
+ *   if (err) throw err;
+ *
+ *   console.log(JSON.stringify(resolved)); // {name: 'json-refs', owner: { ... }}
+ *   console.log(JSON.stringify(metadata)); // {'#/owner': {ref: 'https://api.github.com/repos/whitlockjc/json-refs#/owner'}}
+ * });
+ *
+ * @example
+ * // Example using promises
+ *
+ * JsonRefs.resolveRefs({
+ *   name: 'json-refs',
+ *   owner: {
+ *     $ref: 'https://api.github.com/repos/whitlockjc/json-refs#/owner'
+ *   }
+ * }).then(function (results) {
+ *   console.log(JSON.stringify(results.resolved)); // {name: 'json-refs', owner: { ... }}
+ *   console.log(JSON.stringify(results.metadata)); // {'#/owner': {ref: 'https://api.github.com/repos/whitlockjc/json-refs#/owner'}}
+ * });
+ *
+ * @example
+ * // Example using options.prepareRequest (to add authentication credentials) and options.processContent (to process YAML)
+ *
+ * JsonRefs.resolveRefs({
+ *   name: 'json-refs',
+ *   owner: {
+ *     $ref: 'https://api.github.com/repos/whitlockjc/json-refs#/owner'
+ *   }
+ * }, {
+ *   prepareRequest: function (req) {
+ *     // Add the 'Basic Authentication' credentials
+ *     req.auth('whitlockjc', 'MY_GITHUB_PASSWORD');
+ *
+ *     // Add the 'X-API-Key' header for an API Key based authentication
+ *     // req.set('X-API-Key', 'MY_API_KEY');
+ *   },
+ *   processContent: function (content) {
+ *     return YAML.parse(content);
+ *   }
+ * }).then(function (results) {
+ *   console.log(JSON.stringify(results.resolved)); // {name: 'json-refs', owner: { ... }}
+ *   console.log(JSON.stringify(results.metadata)); // {'#/owner': {ref: 'https://api.github.com/repos/whitlockjc/json-refs#/owner'}}
+ * });
+ */
+module.exports.resolveRefs = function resolveRefs (json, options, done) {
+  var allTasks = Promise.resolve();
+
+  if (arguments.length === 2) {
+    if (_.isFunction(options)) {
+      done = options;
+      options = {};
+    }
+  }
+
+  if (_.isUndefined(options)) {
+    options = {};
+  }
+
+  allTasks = allTasks.then(function () {
+    if (_.isUndefined(json)) {
+      throw new Error('json is required');
+    } else if (!_.isPlainObject(json)) {
+      throw new Error('json must be an object');
+    } else if (!_.isPlainObject(options)) {
+      throw new Error('options must be an object');
+    } else if (!_.isUndefined(done) && !_.isFunction(done)) {
+      throw new Error('done must be a function');
+    }
+
+    // Validate the options (This option does not apply to )
+    if (!_.isUndefined(options.processContent) && !_.isFunction(options.processContent)) {
+      throw new Error('options.processContent must be a function');
+    } else if (!_.isUndefined(options.prepareRequest) && !_.isFunction(options.prepareRequest)) {
+      throw new Error('options.prepareRequest must be a function');
+    } else if (!_.isUndefined(options.location) && !_.isString(options.location)) {
+      throw new Error('options.location must be a string');
+    } else if (!_.isUndefined(options.depth) && !_.isNumber(options.depth)) {
+      throw new Error('options.depth must be a number');
+    } else if (!_.isUndefined(options.depth) && options.depth < 0) {
+      throw new Error('options.depth must be greater or equal to zero');
+    }
+  });
+
+  // Clone the inputs so we do not alter them
+  json = traverse(json).clone();
+  options = traverse(options).clone();
+
+  allTasks = allTasks
+    .then(function () {
+      return resolveRemoteRefs(json, options, '#', {}, {});
+    })
+    .then(function (metadata) {
+      return realResolveRefs(metadata.resolved, options, metadata.metadata);
+    });
+
+  // Use the callback if provided and it is a function
+  if (!_.isUndefined(done) && _.isFunction(done)) {
+    allTasks = allTasks
+      .then(function (results) {
+        done(undefined, results.resolved, results.metadata);
+      }, function (err) {
+        done(err);
+      });
+  }
+
+  return allTasks;
+};
 
 /**
  * Takes a JSON document, resolves all JSON References and returns a fully resolved equivalent along with reference
