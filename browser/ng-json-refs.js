@@ -1,9 +1,13 @@
 (function ngJsonRefsClosure (undefined) {
 
-  var global = {};
+  var global = this;
 
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.JsonRefs = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 /*
+
+  ViiMed: Modified to collapse 'allOf' arrays using 'collapseAllOf' function
+  given in options
+
  * The MIT License (MIT)
  *
  * Copyright (c) 2014 Jeremy Whitlock
@@ -80,6 +84,43 @@ var supportedSchemes = ['file', 'http', 'https'];
 /* Internal Functions */
 
 /**
+ * When options.collapseAllOf is true, extend path item with
+ * values given
+ * @param  {[type]} jsonT   [description]
+ * @param  {[type]} options [description]
+ * @param  {[type]} target  [description]
+ * @param  {[type]} values  [description]
+ * @return {[type]}         [description]
+ */
+function collapseValues (jsonT, path, options, value) {
+  if ( ! path[path.length - 2] === 'allOf' ) {
+    jsonT.set(path, value);
+    return;
+  }
+
+  jsonT.set(path,true);
+  path = path.slice(0,path.length-2);
+
+  var current = jsonT.get(path),
+    allOfs = current.allOf,
+    keys = Object.keys(value);
+
+  // extend current value with properties from
+  // referenced value
+  keys.map(function (key) {
+    current[key] = value[key];
+  });
+  if ( allOfs.filter(function (ref) {
+
+    return ( ref !== true );
+  }).length === 0 ) {
+    delete current.allOf;
+  }
+
+  return;
+}
+
+/**
  * Retrieves the content at the URL and returns its JSON content.
  *
  * @param {string} url - The URL to retrieve
@@ -149,7 +190,7 @@ var isJsonReference = module.exports.isJsonReference = function isJsonReference 
  *
  * @param  {object}  obj - The object to check
  *
- * @returns {Boolean} true if the argument is an object and it has an array property allOf
+ * @return {Boolean} true if the argument is an object and it has an array property allOf
  */
 var isAllOf = module.exports.isAllOf = function isAllOf (obj) {
   return _.isPlainObject(obj) && _.isArray(obj.allOf);
@@ -213,7 +254,7 @@ var findRefs = module.exports.findRefs = function findRefs (json) {
   }, {});
 };
 
-var findAllOfs = module.exports.findAllOfs = function findAllOfs (json) {
+var findAllOfs = module.exports.findAllOfs = function findAllOfs (json, options) {
   if (_.isUndefined(json)) {
     throw new Error('json is required');
   } else if (!_.isPlainObject(json)) {
@@ -340,7 +381,6 @@ function computeUrl (base, ref) {
 function realResolveRefs (json, options, metadata) {
   var depth = _.isUndefined(options.depth) ? 1 : options.depth;
   var jsonT = traverse(json);
-  var allOfs;
 
   function findParentReference (path) {
     var pPath = path.slice(0, path.lastIndexOf('allOf'));
@@ -416,7 +456,7 @@ function realResolveRefs (json, options, metadata) {
 
     var source = jsonT.get(parentPath);
 
-    if (!source) {
+    if ( !source ) {
       return;
     }
 
@@ -471,11 +511,11 @@ function realResolveRefs (json, options, metadata) {
     }
   });
 
-  if (options.collapseAllOf) {
+  if ( options.collapseAllOf ) {
     // Nested allofs must be handled in reverse order
     // so we make an array and reverse it to get our
     // order of operations
-    allOfs = findAllOfs(json);
+    var allOfs = findAllOfs(json);
     Object.keys(allOfs).reverse().map(function (key) {
       replaceAllOf(allOfs[key], key);
     });
@@ -554,7 +594,7 @@ function resolveRemoteRefs (json, options, parentPtr, parents, metadata) {
     };
   }
 
-  _.each(findRefs(json), function (ptr, refPtr) {
+  _.each(findRefs(json, options), function (ptr, refPtr) {
     if (isRemotePointer(ptr)) {
       allTasks = allTasks.then(function () {
         var remoteLocation = computeUrl(options.location, ptr);
