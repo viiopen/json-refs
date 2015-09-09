@@ -570,8 +570,12 @@ function resolveRemoteRefs (json, options, parentPtr, parents, metadata) {
               var rOptions = _.cloneDeep(options);
               var newParentPtr = combineRefs(parentPtr, refPtr);
 
-              // Remove the last path segment
-              refBase = refBase.substring(0, refBase.lastIndexOf('/') + 1);
+              if (refBase.charAt(0) !== '/') {
+                // Remove the last path segment
+                refBase = refBase.substring(0, refBase.lastIndexOf('/') + 1);
+              } else {
+                refBase = '';
+              }
 
               // Update the recursive location
               rOptions.location = computeUrl(options.location, refBase);
