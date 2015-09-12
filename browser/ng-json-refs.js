@@ -45,6 +45,8 @@ var traverse = require('traverse');
 var remoteCache = {};
 var supportedSchemes = ['file', 'http', 'https'];
 
+module.exports.traverse = traverse;
+
 /**
  * Callback used by {@link resolveRefs}.
  *
